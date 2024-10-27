@@ -5,7 +5,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "db": "sst shell drizzle-kit",
-    "dev": "tsx watch index.ts"
   },
   "keywords": [],
   "author": "",
