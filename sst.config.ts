@@ -9,12 +9,36 @@ export default $config({
     };
   },
   async run() {
+    // Resources
     const bucket = new sst.cloudflare.Bucket("MyBucket");
+    const db = new sst.cloudflare.D1("HonoDatabase");
 
+    // NOTE: Turned on observabiltiy manually in the console to get logs
     const hono = new sst.cloudflare.Worker("Hono", {
       url: true,
       handler: "index.ts",
-      link: [bucket],
+      link: [bucket, db],
+    });
+
+    // Secrets
+    const databaseId = db.id.apply(
+      (id) => new sst.Secret("HoneDatabaseId", id),
+    );
+    const cloudflareAccountId = new sst.Secret(
+      "CloudflareAccountId",
+      sst.cloudflare.DEFAULT_ACCOUNT_ID,
+    );
+    const cloudflareApiToken = new sst.Secret(
+      "CloudflareApiToken",
+      process.env.CLOUDFLARE_API_TOKEN,
+    );
+
+    // Other
+    new sst.x.DevCommand("DrizzleStudio", {
+      link: [db, databaseId, cloudflareAccountId, cloudflareApiToken],
+      dev: {
+        command: "npx drizzle-kit studio",
+      },
     });
 
     return {

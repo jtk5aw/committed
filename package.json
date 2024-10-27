@@ -3,18 +3,23 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db": "sst shell drizzle-kit",
+    "dev": "tsx watch index.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "drizzle-kit": "^0.26.2",
+    "drizzle-orm": "^0.35.3",
     "hono": "^4.6.7",
     "sst": "3.2.61"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20241022.0",
-    "prettier": "3.3.3"
+    "prettier": "3.3.3",
+    "tsx": "^4.19.2"
   }
 }

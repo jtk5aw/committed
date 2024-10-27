@@ -2,17 +2,31 @@
 /* tslint:disable */
 /* eslint-disable */
 /* deno-fmt-ignore-file */
-import "sst";
-export {};
-import "sst";
+import "sst"
+export {}
+import "sst"
 declare module "sst" {
-  export interface Resource {}
+  export interface Resource {
+    "CloudflareAccountId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "CloudflareApiToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "HoneDatabaseId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+  }
 }
-// cloudflare
+// cloudflare 
 import * as cloudflare from "@cloudflare/workers-types";
 declare module "sst" {
   export interface Resource {
-    Hono: cloudflare.Service;
-    MyBucket: cloudflare.R2Bucket;
+    "Hono": cloudflare.Service
+    "HonoDatabase": cloudflare.D1Database
+    "MyBucket": cloudflare.R2Bucket
   }
 }
