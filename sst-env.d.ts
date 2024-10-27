@@ -2,18 +2,17 @@
 /* tslint:disable */
 /* eslint-disable */
 /* deno-fmt-ignore-file */
-import "sst"
-export {}
-import "sst"
+import "sst";
+export {};
+import "sst";
 declare module "sst" {
-  export interface Resource {
-  }
+  export interface Resource {}
 }
-// cloudflare 
+// cloudflare
 import * as cloudflare from "@cloudflare/workers-types";
 declare module "sst" {
   export interface Resource {
-    "Hono": cloudflare.Service
-    "MyBucket": cloudflare.R2Bucket
+    Hono: cloudflare.Service;
+    MyBucket: cloudflare.R2Bucket;
   }
 }
