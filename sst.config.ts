@@ -12,11 +12,9 @@ export default $config({
     // Resources
     const bucket = new sst.cloudflare.Bucket("MyBucket");
     const db = new sst.cloudflare.D1("HonoDatabase");
-
-    // NOTE: Turned on observabiltiy manually in the console to get logs
     const hono = new sst.cloudflare.Worker("Hono", {
       url: true,
-      handler: "index.ts",
+      handler: "src/index.ts",
       link: [bucket, db],
     });
 

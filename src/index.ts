@@ -1,12 +1,43 @@
-import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 import { Resource } from "sst";
 import { notes } from "./db/notes.sql";
 import { database } from "./db/drizzle";
+import { OpenAPIHono } from "@hono/zod-openapi";
+import { NotesResponse, route } from "./openapi";
 import { eq } from "drizzle-orm";
+import { z } from "@hono/zod-openapi";
 
-const app = new Hono()
+const app = new OpenAPIHono();
+
+// Middlewares
+app.use(logger());
+
+// OpenApi routes
+app.openapi(route, async (c) => {
+  const db = database(Resource.HonoDatabase);
+  console.log("this is a test");
+  const { id } = c.req.valid("param");
+  console.log("this is a second test");
+  const result = await db.query.notes.findFirst({
+    where: eq(notes.id, id),
+  });
+  console.log("this is a third test");
+
+  if (!result) {
+    throw new HTTPException(400, { message: "Not an available id." });
+  }
+
+  const response = {
+    id: result.id,
+    content: result.content,
+  };
+  const validatedResponse = NotesResponse.parse(response);
+  return c.json(validatedResponse);
+});
+
+// Non-openapi Routes
+app
   .put("/", async (c) => {
     const key = crypto.randomUUID();
     await Resource.MyBucket.put(key, c.req.raw.body, {
@@ -43,21 +74,6 @@ const app = new Hono()
     });
     return c.body(JSON.stringify(result));
   })
-  .get("/notes/:id", async (c) => {
-    const db = database(Resource.HonoDatabase);
-    const id = parseInt(c.req.param("id"));
-    const result = await db
-      .select()
-      .from(notes)
-      .where(eq(notes.id, id))
-      .limit(1);
-
-    const value = result.values().next();
-    if (value.done) {
-      throw new HTTPException(400, { message: "Not an available id." });
-    }
-    return c.body(JSON.stringify(value.value));
-  });
-app.use(logger());
+  .get("/notes/:id", async (c) => {});
 
 export default app;
