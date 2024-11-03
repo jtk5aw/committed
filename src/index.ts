@@ -6,7 +6,6 @@ import { database } from "./db/drizzle";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { NotesResponse, route } from "./openapi";
 import { eq } from "drizzle-orm";
-import { z } from "@hono/zod-openapi";
 
 const app = new OpenAPIHono();
 
@@ -16,13 +15,10 @@ app.use(logger());
 // OpenApi routes
 app.openapi(route, async (c) => {
   const db = database(Resource.HonoDatabase);
-  console.log("this is a test");
   const { id } = c.req.valid("param");
-  console.log("this is a second test");
   const result = await db.query.notes.findFirst({
     where: eq(notes.id, id),
   });
-  console.log("this is a third test");
 
   if (!result) {
     throw new HTTPException(400, { message: "Not an available id." });
