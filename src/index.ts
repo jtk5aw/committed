@@ -1,26 +1,37 @@
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 import { createMiddleware } from "hono/factory";
+import { prettyJSON } from "hono/pretty-json";
 import { Resource } from "sst";
-import { notes } from "./db/notes.sql";
 import { database, DatabaseType } from "./db/drizzle";
-import { OpenAPIHono, z } from "@hono/zod-openapi";
+import { zValidator } from "@hono/zod-validator";
 import {
   ErrorResponse,
   INCORRECT_USERNAME_PASSWORD_KIND,
   LoginFailedResponse,
+  LoginRequestBody,
   LoginSuccessResponse,
+  SignUpRequestBody,
   SignUpSuccessResponse,
   USER_NAME_TAKEN_KIND,
   VALIDATION_FAILURE_KIND,
-  login_route,
-  signup_route,
 } from "./openapi";
 import { eq } from "drizzle-orm";
 import { users } from "./db/commits.sql";
+import { Hono } from "hono";
+import { z, ZodSchema } from "zod";
 
-const app = new OpenAPIHono({
-  defaultHook: (result, c) => {
+// Custom created Middlewares and Middleware wrappers
+const databaseClient = createMiddleware<{ Variables: { db: DatabaseType } }>(
+  async (c, next) => {
+    const db = database(Resource.HonoDatabase);
+    c.set("db", db);
+    await next();
+  },
+);
+
+function createZValidator(schema: ZodSchema) {
+  return zValidator("json", schema, (result, c) => {
     if (!result.success) {
       const errorResponse = {
         code: 422,
@@ -30,90 +41,98 @@ const app = new OpenAPIHono({
       const validatedErrorResponse = ErrorResponse.parse(errorResponse);
       return c.json(validatedErrorResponse, 422);
     }
-  },
-});
+  });
+}
 
-// Middlewares
-app.use(logger());
+/**
+ * Type inference is much much better when everything is chained like this rather than on
+ * separate lines. I don't understand the mechanics of that and I dislike it visually but
+ * my visual preference loses to the type inference benefits
+ */
+const app = new Hono()
+  // Middleware
+  .use(logger())
+  .use(prettyJSON())
+  .use(databaseClient)
+  // Routes
+  .post("/signup", createZValidator(SignUpRequestBody), async (c) => {
+    const { username, password, is_public } = c.req.valid("json");
 
-// Routes
-app.openapi(signup_route, async (c) => {
-  const db = database(Resource.HonoDatabase);
-  const { username, password, is_public } = c.req.valid("json");
+    const salt_arr = new Uint8Array(16);
+    crypto.getRandomValues(salt_arr);
+    const hashedPasswordArr = await hashPassword(password, salt_arr);
 
-  const salt_arr = new Uint8Array(16);
-  crypto.getRandomValues(salt_arr);
-  const hashedPasswordArr = await hashPassword(password, salt_arr);
+    const saltHex = await converArrToHex(salt_arr);
+    const passwordHex = await converArrToHex(hashedPasswordArr);
 
-  const saltHex = await converArrToHex(salt_arr);
-  const passwordHex = await converArrToHex(hashedPasswordArr);
+    const result = await c.var.db
+      .insert(users)
+      .values({
+        username,
+        password: passwordHex,
+        salt: saltHex,
+        deleted: false,
+        public: is_public,
+      })
+      .onConflictDoNothing();
 
-  const result = await db
-    .insert(users)
-    .values({
-      username,
-      password: passwordHex,
-      salt: saltHex,
-      deleted: false,
-      public: is_public,
-    })
-    .onConflictDoNothing();
+    // NOTE: Assumes that all DB errors except duplicates will thrown an exception above.
+    // If other db errors make it here then the returned error will be strange
+    if (result.meta.changes == 0) {
+      const errorResponse = {
+        code: 422,
+        kind: USER_NAME_TAKEN_KIND,
+        message: "Provided username is already taken.",
+      };
+      const validatedErrorResponse =
+        await ErrorResponse.parseAsync(errorResponse);
+      return c.json(validatedErrorResponse, 422);
+    }
 
-  // NOTE: Assumes that all DB errors except duplicates will thrown an exception above.
-  // If other db errors make it here then the returned error will be strange
-  if (result.meta.changes == 0) {
-    const errorResponse = {
-      code: 422,
-      kind: USER_NAME_TAKEN_KIND,
-      message: "Provided username is already taken.",
+    const response = {
+      message: "Success!",
     };
-    const validatedErrorResponse = ErrorResponse.parse(errorResponse);
-    return c.json(validatedErrorResponse, 422);
-  }
+    const validatedResponse = SignUpSuccessResponse.parse(response);
+    return c.json(validatedResponse, 200);
+  })
+  .post("/login", createZValidator(LoginRequestBody), async (c) => {
+    const { username, password } = c.req.valid("json");
 
-  const response = {
-    message: "Success!",
-  };
-  const validatedResponse = SignUpSuccessResponse.parse(response);
-  return c.json(validatedResponse, 200);
-});
+    const result = await c.var.db.query.users.findFirst({
+      where: eq(users.username, username),
+    });
 
-app.openapi(login_route, async (c) => {
-  const db = database(Resource.HonoDatabase);
-  const { username, password } = c.req.valid("json");
+    if (!result) {
+      return c.json(await loginFailedResponse(), 401);
+    }
 
-  const result = await db.query.users.findFirst({
-    where: eq(users.username, username),
+    const saltHex = result.salt;
+    const matchResultPairs = saltHex.match(/.{1,2}/g);
+    if (!matchResultPairs) {
+      throw new HTTPException(500);
+    }
+    const salt = new Uint8Array(
+      matchResultPairs.map((byte) => parseInt(byte, 16)),
+    );
+
+    const providedPasswordHashArr = await hashPassword(password, salt);
+    const providedPasswordHex = await converArrToHex(providedPasswordHashArr);
+
+    const passwordHex = result.password;
+    if (passwordHex != providedPasswordHex) {
+      return c.json(await loginFailedResponse(), 401);
+    }
+
+    const response = {
+      message: "Successful login!",
+    };
+    const validatedResponse = LoginSuccessResponse.parse(response);
+    return c.json(validatedResponse, 200);
   });
 
-  if (!result) {
-    return c.json(await loginFailedResponse(), 401);
-  }
-
-  const saltHex = result.salt;
-  const matchResultPairs = saltHex.match(/.{1,2}/g);
-  if (!matchResultPairs) {
-    throw new HTTPException(500);
-  }
-  const salt = new Uint8Array(
-    matchResultPairs.map((byte) => parseInt(byte, 16)),
-  );
-
-  const providedPasswordHashArr = await hashPassword(password, salt);
-  const providedPasswordHex = await converArrToHex(providedPasswordHashArr);
-
-  const passwordHex = result.password;
-  if (passwordHex != providedPasswordHex) {
-    return c.json(await loginFailedResponse(), 401);
-  }
-
-  const response = {
-    message: "Successful login!",
-  };
-  const validatedResponse = LoginSuccessResponse.parse(response);
-  return c.json(validatedResponse, 200);
-});
-
+/**
+ * Any time login fails this should be the response.
+ * The only exception is if the payload provided is invalid. Then that will return a specific error */
 async function loginFailedResponse(): Promise<
   z.infer<typeof LoginFailedResponse>
 > {
@@ -171,45 +190,5 @@ async function converArrToHex(arr: Uint8Array): Promise<string> {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
-
-// Non-openapi Routes
-app
-  .put("/", async (c) => {
-    const key = crypto.randomUUID();
-    await Resource.MyBucket.put(key, c.req.raw.body, {
-      httpMetadata: {
-        contentType: c.req.header("content-type"),
-      },
-    });
-    return new Response(`Object created with key: ${key}`);
-  })
-  .get("/:id", async (c) => {
-    const id: number = parseInt(c.req.param("id"));
-    const first = await Resource.MyBucket.list().then((res) => {
-      if (id >= res.objects.length) {
-        throw new HTTPException(400, { message: "Not an available id." });
-      }
-      return res.objects.sort(
-        (a, b) => a.uploaded.getTime() - b.uploaded.getTime(),
-      )[id];
-    });
-    const result = await Resource.MyBucket.get(first.key);
-    c.header("content-type", result.httpMetadata.contentType);
-    return c.body(result.body);
-  })
-  .put("/notes", async (c) => {
-    const db = database(Resource.HonoDatabase);
-    const body = await c.req.json();
-    if (!body.content) {
-      throw new HTTPException(400, {
-        message: "Did not provide content field",
-      });
-    }
-    const result = await db.insert(notes).values({
-      content: body.content,
-    });
-    return c.body(JSON.stringify(result));
-  })
-  .get("/notes/:id", async (c) => {});
 
 export default app;
