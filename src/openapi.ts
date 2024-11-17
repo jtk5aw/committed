@@ -3,9 +3,14 @@ import { z } from "zod";
 // Shared invalid error response
 export const USER_NAME_TAKEN_KIND = "user_name_taken";
 export const VALIDATION_FAILURE_KIND = "validation_failure";
+export const VERIFICATION_FAILURE_KIND = "verification_failure";
 export const ErrorResponse = z.object({
   code: z.number(),
-  kind: z.enum([VALIDATION_FAILURE_KIND, USER_NAME_TAKEN_KIND]),
+  kind: z.enum([
+    VALIDATION_FAILURE_KIND,
+    USER_NAME_TAKEN_KIND,
+    VERIFICATION_FAILURE_KIND,
+  ]),
   message: z.string(),
 });
 
@@ -34,6 +39,17 @@ export const LoginRequestBody = z.object({
 });
 
 export const LoginSuccessResponse = z.object({
-  // TODO: Update this to be some token that can be used to make further requests
   message: z.string(),
+  jwt: z.string(),
+});
+
+// Verify route
+export const VerifyRequestBody = z.object({
+  token: z.string(),
+});
+
+export const VerifySuccessResponse = z.object({
+  username: z.string(),
+  expires: z.number().int().min(0),
+  issuedAt: z.number().int().min(0),
 });

@@ -12,13 +12,14 @@ export default $config({
     // Resources
     const bucket = new sst.cloudflare.Bucket("MyBucket");
     const db = new sst.cloudflare.D1("HonoDatabase");
+    const jwtSecret = new sst.Secret("CloudflareJwtSecret");
     const hono = new sst.cloudflare.Worker("Hono", {
       url: true,
       handler: "src/index.ts",
-      link: [bucket, db],
+      link: [bucket, db, jwtSecret],
     });
 
-    // Secrets
+    // Other Secrets
     const databaseId = db.id.apply(
       (id) => new sst.Secret("HoneDatabaseId", id),
     );

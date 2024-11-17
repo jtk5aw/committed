@@ -15,6 +15,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "CloudflareJwtSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "HoneDatabaseId": {
       "type": "sst.sst.Secret"
       "value": string
