@@ -10,14 +10,16 @@ export default $config({
   },
   async run() {
     // Resources
-    const bucket = new sst.cloudflare.Bucket("MyBucket");
     const db = new sst.cloudflare.D1("HonoDatabase");
     const jwtSecret = new sst.Secret("CloudflareJwtSecret");
     const hono = new sst.cloudflare.Worker("Hono", {
       url: true,
       handler: "src/index.ts",
-      link: [bucket, db, jwtSecret],
+      link: [db, jwtSecret],
     });
+
+    // Leaving for now cause there's stuff in it and deleting it is causing problems
+    const bucket = new sst.cloudflare.Bucket("MyBucket");
 
     // Other Secrets
     const databaseId = db.id.apply(

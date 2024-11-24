@@ -18,11 +18,11 @@ import {
   VERIFICATION_FAILURE_KIND,
   VerifyRequestBody,
   VerifySuccessResponse,
-} from "./openapi";
+} from "./api";
 import { eq } from "drizzle-orm";
 import { users } from "./db/commits.sql";
 import { Hono } from "hono";
-import { string, z, ZodSchema } from "zod";
+import { z, ZodSchema } from "zod";
 
 // Constants
 const JWT_SIGNING_ALGO = { name: "HMAC", hash: "SHA-256" };
