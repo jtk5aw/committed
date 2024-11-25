@@ -1,0 +1,43 @@
+{
+    "version": "1.0",
+    "projections": {
+        "weather-crate-server-sdk": {
+            "imports": [
+                "./main.smithy"
+            ],
+            "plugins": {
+                "rust-server-codegen": {
+                    "service": "com.example#Service",
+                    "module": "weather-crate-server-sdk",
+                    "moduleDescription": "Rust server SDK for CHANGEME",
+                    "moduleVersion": "0.1.0",
+                    "moduleAuthors": [
+                        "ChangeMe <changeme@changeme>"
+                    ],
+                    "runtimeConfig": {
+                        "version": "DEFAULT"
+                    }
+                }
+            }
+        },
+        "weather-crate-client-sdk": {
+            "imports": [
+                "./main.smithy"
+            ],
+            "plugins": {
+                "rust-codegen": {
+                    "service": "com.example#Service",
+                    "module": "weather-crate-client-sdk",
+                    "moduleDescription": "Rust client SDK for CHANGEME",
+                    "moduleVersion": "0.1.0",
+                    "moduleAuthors": [
+                        "ChangeMe <changeme@changeme>"
+                    ],
+                    "runtimeConfig": {
+                        "version": "DEFAULT"
+                    }
+                }
+            }
+        }
+    }
+}
