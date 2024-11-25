@@ -1,6 +1,6 @@
 rootProject.name = "pokemon-service"
 
-includeBuild("smithy-rs")
+includeBuild("../smithy-rs")
 include(":model")
 
 plugins {
