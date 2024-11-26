@@ -1,3 +1,9 @@
 node_modules
 # sst
 .sst
+
+# Gradle
+.gradle
+build/
+gradle-app.setting
+!gradle-wrapper.jar

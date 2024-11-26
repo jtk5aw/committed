@@ -1,0 +1,24 @@
+{
+    "version": "1.0",
+    "projections": {
+        "weather-crate-client-sdk": {
+            "imports": [
+                "./weather.smithy"
+            ],
+            "plugins": {
+                "rust-client-codegen": {
+                    "service": "example.weather#Weather",
+                    "module": "weather-crate-client-sdk",
+                    "moduleDescription": "Rust client SDK for Weather Service",
+                    "moduleVersion": "0.1.0",
+                    "moduleAuthors": [
+                        "Jackson Kennedy <jacksontkennedy99@gmail.com>"
+                    ],
+                    "runtimeConfig": {
+                        "version": "DEFAULT"
+                    }
+                }
+            }
+        }
+    }
+}
