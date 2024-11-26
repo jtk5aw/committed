@@ -22,10 +22,11 @@ smithy { outputDirectory = buildDir.resolve("codegen") }
 tasks {
     val srcDir = projectDir.resolve("../")
     val clientSdkCrateName: String by project
+    val workspaceDir: String by project
     val copyClientCrate =
             create<Copy>("copyClientCrate") {
                 from("$buildDir/codegen/$clientSdkCrateName/rust-client-codegen")
-                into("$srcDir/$clientSdkCrateName")
+                into("$srcDir/$workspaceDir/$clientSdkCrateName")
             }
 
     val generateWorkspace = create<Task>("generateWorkspace")

@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "projections": {
-        "weather-crate-client-sdk": {
+        "weather-service-sdk": {
             "imports": [
                 "./weather.smithy"
             ],
