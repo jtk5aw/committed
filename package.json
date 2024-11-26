@@ -4,7 +4,8 @@
   "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "db": "sst shell drizzle-kit"
+    "db": "sst shell drizzle-kit",
+    "codegen": "./gradlew clean && ./gradlew assemble"
   },
   "keywords": [],
   "author": "",
