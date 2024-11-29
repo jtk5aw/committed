@@ -1,3 +1,12 @@
+## Git repo setup
+
+The smithy stuff requires a sub-module of smithy-rs. The following commands need to be run to set this up 
+
+```
+git submodule init
+git submodule update
+```
+
 ## DB Stuff
 
 After updating the schema files for the db run the following command to generate migrations 
