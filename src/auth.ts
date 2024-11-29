@@ -1,10 +1,7 @@
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
-import { createMiddleware } from "hono/factory";
 import { prettyJSON } from "hono/pretty-json";
 import { Resource } from "sst";
-import { database, DatabaseType } from "./db/drizzle";
-import { zValidator } from "@hono/zod-validator";
 import {
   ErrorResponse,
   INCORRECT_USERNAME_PASSWORD_KIND,
@@ -14,15 +11,15 @@ import {
   SignUpRequestBody,
   SignUpSuccessResponse,
   USER_NAME_TAKEN_KIND,
-  VALIDATION_FAILURE_KIND,
   VERIFICATION_FAILURE_KIND,
   VerifyRequestBody,
   VerifySuccessResponse,
-} from "./api";
+} from "./api_types";
 import { eq } from "drizzle-orm";
 import { users } from "./db/commits.sql";
 import { Hono } from "hono";
-import { z, ZodSchema } from "zod";
+import { z } from "zod";
+import { createZValidator, databaseClient } from "./shared";
 
 // Constants
 const JWT_SIGNING_ALGO = { name: "HMAC", hash: "SHA-256" };
@@ -33,33 +30,6 @@ const JWT_HEADER_BASE_64 = base64UrlEncode(
   }),
 );
 const COMMITTED_ISSUER = "committed";
-
-// Custom created Middlewares and Middleware wrappers
-const databaseClient = createMiddleware<{ Variables: { db: DatabaseType } }>(
-  async (c, next) => {
-    // TODO: I think this is creating a new db client even if the worker is warm.
-    // Can probably optimize this so only cold starts get a new client
-    const db = database(Resource.HonoDatabase);
-    c.set("db", db);
-    await next();
-  },
-);
-
-function createZValidator(schema: ZodSchema) {
-  return zValidator("json", schema, (result, c) => {
-    // Forces TS to believe .error exists
-    if (result.success === false) {
-      console.log(result.error);
-      const errorResponse = {
-        code: 422,
-        kind: VALIDATION_FAILURE_KIND,
-        message: "Failed to parse input",
-      };
-      const validatedErrorResponse = ErrorResponse.parse(errorResponse);
-      return c.json(validatedErrorResponse, 422);
-    }
-  });
-}
 
 /**
  * Type inference is much much better when everything is chained like this rather than on

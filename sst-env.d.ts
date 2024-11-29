@@ -29,7 +29,8 @@ declare module "sst" {
 import * as cloudflare from "@cloudflare/workers-types";
 declare module "sst" {
   export interface Resource {
-    "Hono": cloudflare.Service
+    "Api": cloudflare.Service
+    "Auth": cloudflare.Service
     "HonoDatabase": cloudflare.D1Database
     "MyBucket": cloudflare.R2Bucket
   }

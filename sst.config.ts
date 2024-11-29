@@ -12,10 +12,15 @@ export default $config({
     // Resources
     const db = new sst.cloudflare.D1("HonoDatabase");
     const jwtSecret = new sst.Secret("CloudflareJwtSecret");
-    const hono = new sst.cloudflare.Worker("Hono", {
-      url: true,
-      handler: "src/index.ts",
+    const auth = new sst.cloudflare.Worker("Auth", {
+      url: false,
+      handler: "src/auth.ts",
       link: [db, jwtSecret],
+    });
+    const api = new sst.cloudflare.Worker("Api", {
+      url: true,
+      handler: "src/api.ts",
+      link: [auth, db],
     });
 
     // Leaving for now cause there's stuff in it and deleting it is causing problems
@@ -43,7 +48,7 @@ export default $config({
     });
 
     return {
-      api: hono.url,
+      api: api.url,
     };
   },
 });
