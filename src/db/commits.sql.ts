@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const commits = sqliteTable("commits", {
@@ -17,6 +17,13 @@ export const commits = sqliteTable("commits", {
     .default(sql`(CURRENT_TIMESTAMP)`)
     .$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
 });
+
+export const commitsRelations = relations(commits, ({ one }) => ({
+  users: one(users, {
+    fields: [commits.user_id],
+    references: [users.id],
+  }),
+}));
 
 export const users = sqliteTable(
   "users",
@@ -41,3 +48,7 @@ export const users = sqliteTable(
     };
   },
 );
+
+export const userRelations = relations(users, ({ many }) => ({
+  commits: many(commits),
+}));

@@ -4,30 +4,36 @@ import { prettyJSON } from "hono/pretty-json";
 import { Resource } from "sst";
 import {
   ErrorResponse,
-  INCORRECT_USERNAME_PASSWORD_KIND,
+  ErrorResponseEnum,
+  LoginFailedEnum,
   LoginFailedResponse,
   LoginRequestBody,
   LoginSuccessResponse,
   SignUpRequestBody,
   SignUpSuccessResponse,
-  USER_NAME_TAKEN_KIND,
-  VERIFICATION_FAILURE_KIND,
   VerifyRequestBody,
   VerifySuccessResponse,
 } from "./api_types";
 import { eq } from "drizzle-orm";
 import { users } from "./db/commits.sql";
 import { Hono } from "hono";
-import { z } from "zod";
 import { createZValidator, databaseClient } from "./shared";
+import { hc } from "hono/client";
+import { base64url } from "rfc4648";
+
+// TODO: Do some more serious testing of the signing and verification
+// all I've tested is just blatantely wrong signatures not slightly modified
 
 // Constants
 const JWT_SIGNING_ALGO = { name: "HMAC", hash: "SHA-256" };
-const JWT_HEADER_BASE_64 = base64UrlEncode(
-  JSON.stringify({
-    alg: "H256",
-    typ: "JWT",
-  }),
+const JWT_HEADER_BASE_64 = base64url.stringify(
+  new TextEncoder().encode(
+    JSON.stringify({
+      alg: "H256",
+      typ: "JWT",
+    }),
+  ),
+  { pad: false },
 );
 const COMMITTED_ISSUER = "committed";
 
@@ -66,21 +72,18 @@ const app = new Hono()
     // NOTE: Assumes that all DB errors except duplicates will thrown an exception above.
     // If other db errors make it here then the returned error will be strange
     if (result.meta.changes == 0) {
-      const errorResponse = {
+      const errorResponse: ErrorResponse = {
         code: 422,
-        kind: USER_NAME_TAKEN_KIND,
+        kind: ErrorResponseEnum.UserNameTakenKind,
         message: "Provided username is already taken.",
       };
-      const validatedErrorResponse =
-        await ErrorResponse.parseAsync(errorResponse);
-      return c.json(validatedErrorResponse, 422);
+      return c.json(errorResponse, 422);
     }
 
-    const response = {
+    const response: SignUpSuccessResponse = {
       message: "Success!",
     };
-    const validatedResponse = SignUpSuccessResponse.parse(response);
-    return c.json(validatedResponse, 200);
+    return c.json(response, 200);
   })
   .post("/login", createZValidator(LoginRequestBody), async (c) => {
     const { username, password } = c.req.valid("json");
@@ -111,14 +114,17 @@ const app = new Hono()
     }
 
     const key = await getJwtSigningKey();
-    const jwt = await generateJwt(username, key);
+    // TODO: This username id will be publicly available.
+    //  having a auto-increment field for the current users number
+    //  and making that public info is #bad. This is left as a string
+    //  so that when I fix that issue this is easy to fix
+    const jwt = await generateJwt(result.id.toString(), key);
 
-    const response = {
+    const response: LoginSuccessResponse = {
       message: "Successful login!",
       jwt,
     };
-    const validatedResponse = LoginSuccessResponse.parse(response);
-    return c.json(validatedResponse, 200);
+    return c.json(response, 200);
   })
   .post("/verify", createZValidator(VerifyRequestBody), async (c) => {
     const { token } = c.req.valid("json");
@@ -127,21 +133,19 @@ const app = new Hono()
     if (result.success === false) {
       return c.json(result.error, 401);
     }
-    return c.json(result.data, 200);
+    const data: VerifySuccessResponse = result.data;
+    return c.json(data, 200);
   });
 
 /**
  * Any time login fails this should be the response.
  * The only exception is if the payload provided is invalid. Then that will return a specific error */
-async function loginFailedResponse(): Promise<
-  z.infer<typeof LoginFailedResponse>
-> {
-  const errorResponse = {
+async function loginFailedResponse(): Promise<LoginFailedResponse> {
+  return {
     code: 401,
-    reason: INCORRECT_USERNAME_PASSWORD_KIND,
+    reason: LoginFailedEnum.IncorrectUsernamePasswordKind,
     message: "Provided username/password was incorrect",
   };
-  return LoginFailedResponse.parse(errorResponse);
 }
 
 /**
@@ -212,16 +216,21 @@ async function getJwtSigningKey(): Promise<CryptoKey> {
 /**
  * Generates a JWT token for the given username and with the provided signing key.
  */
-async function generateJwt(username: string, key: CryptoKey): Promise<string> {
+async function generateJwt(userId: string, key: CryptoKey): Promise<string> {
   const epochSeconds = Math.floor(new Date().getTime() / 1000);
   const claims = {
     iss: COMMITTED_ISSUER,
-    sub: username,
+    sub: userId,
     iat: epochSeconds,
     exp: epochSeconds + 1800,
   };
-  const claimsBase64 = base64UrlEncode(JSON.stringify(claims));
-  const stringToSign = JWT_HEADER_BASE_64 + "." + claimsBase64;
+  const claimsBase64Result = base64urlEncode(
+    new TextEncoder().encode(JSON.stringify(claims)),
+  );
+  if (claimsBase64Result.success === false) {
+    throw claimsBase64Result.err;
+  }
+  const stringToSign = JWT_HEADER_BASE_64 + "." + claimsBase64Result.data;
   const encodedStringToSign = new TextEncoder().encode(stringToSign);
   const signature = await crypto.subtle.sign(
     JWT_SIGNING_ALGO,
@@ -229,19 +238,19 @@ async function generateJwt(username: string, key: CryptoKey): Promise<string> {
     encodedStringToSign,
   );
   const signatureArray = new Uint8Array(signature);
-  const signatureString = Array.from(signatureArray)
-    .map((b) => String.fromCharCode(b))
-    .join("");
-  const signatureBase64 = base64UrlEncode(signatureString);
-  return stringToSign + "." + signatureBase64;
+  const signatureEncodeResult = base64urlEncode(signatureArray);
+  if (signatureEncodeResult.success === false) {
+    throw signatureEncodeResult.err;
+  }
+  return stringToSign + "." + signatureEncodeResult.data;
 }
 
 async function verifyJwt(
   token: string,
   key: CryptoKey,
 ): Promise<
-  | { success: true; data: z.infer<typeof VerifySuccessResponse> }
-  | { success: false; error: z.infer<typeof ErrorResponse> }
+  | { success: true; data: VerifySuccessResponse }
+  | { success: false; error: ErrorResponse }
 > {
   const firstPeriodPos = token.indexOf(".");
   if (firstPeriodPos == -1) {
@@ -258,11 +267,21 @@ async function verifyJwt(
     };
   }
 
-  const encoder = new TextEncoder();
-  const signature = encoder.encode(token.substring(secondPeriodPos + 1));
-  const expectedSigned = encoder.encode(token.substring(0, secondPeriodPos));
+  const signatureDecodeResult = base64urlDecode(
+    token.substring(secondPeriodPos + 1),
+  );
+  if (!signatureDecodeResult.success) {
+    return {
+      success: false,
+      error: await failedVerificationResponse(),
+    };
+  }
+  const signature = signatureDecodeResult.data;
+  const expectedSigned = new TextEncoder().encode(
+    token.substring(0, secondPeriodPos),
+  );
 
-  const success = crypto.subtle.verify(
+  const success: boolean = await crypto.subtle.verify(
     JWT_SIGNING_ALGO,
     key,
     signature,
@@ -276,49 +295,73 @@ async function verifyJwt(
     };
   }
 
+  const claimsDecodeResult = base64urlDecode(
+    token.substring(firstPeriodPos + 1, secondPeriodPos),
+  );
+  if (!claimsDecodeResult.success) {
+    return {
+      success: false,
+      error: await failedVerificationResponse(),
+    };
+  }
   const { sub, exp, iat } = JSON.parse(
-    base64UrlDecode(token.substring(firstPeriodPos + 1, secondPeriodPos)),
+    new TextDecoder().decode(claimsDecodeResult.data),
   );
 
+  // TODO: NEED TO CHECK THE EXPIRATION HERE
+
   // TODO: Validate the claim matches a zod type
-  const response = {
-    username: sub,
+  const response: VerifySuccessResponse = {
+    userId: sub,
     expires: exp,
     issuedAt: iat,
   };
   console.log(response);
-  const validateResponse = VerifySuccessResponse.parse(response);
   return {
     success: true,
-    data: validateResponse,
+    data: response,
   };
 }
 
-async function failedVerificationResponse(): Promise<
-  z.infer<typeof ErrorResponse>
-> {
-  const errorResponse = {
+async function failedVerificationResponse(): Promise<ErrorResponse> {
+  return {
     code: 401,
-    kind: VERIFICATION_FAILURE_KIND,
+    kind: ErrorResponseEnum.VerificationFailureKind,
     message: "Failed to verify the token",
   };
-  const validatedErrorResponse = ErrorResponse.parse(errorResponse);
-  return validatedErrorResponse;
 }
 
-/**
- * Taken from https://medium.com/@bagdasaryanaleksandr97/understanding-base64-vs-base64-url-encoding-whats-the-difference-31166755bc26
- */
-function base64UrlEncode(str: string): string {
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function base64UrlDecode(str: string): string {
-  str = str.replace(/-/g, "+").replace(/_/g, "/");
-  while (str.length % 4) {
-    str += "=";
+function base64urlEncode(
+  array: Uint8Array,
+): { success: true; data: string } | { success: false; err: Error } {
+  try {
+    return {
+      success: true,
+      data: base64url.stringify(array, { pad: false }),
+    };
+  } catch (err) {
+    console.log("Failed to encode the provided array");
+    console.log(err);
+    return { success: false, err };
   }
-  return atob(str);
 }
 
+function base64urlDecode(
+  str: string,
+): { success: true; data: Uint8Array } | { success: false; err: Error } {
+  try {
+    return {
+      success: true,
+      data: base64url.parse(str, { loose: true }),
+    };
+  } catch (err) {
+    console.log("Failed to decode the provided array");
+    console.log(err);
+    return { success: false, err };
+  }
+}
+
+const client = hc<typeof app>("");
+export type Client = typeof client;
+export type AuthClientType = typeof app;
 export default app;

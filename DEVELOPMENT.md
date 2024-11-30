@@ -25,10 +25,17 @@ npm run db migrate
 
 Regenerate the secret used for JWT token stuff with this command
 
+**WARNING**: This will require logging into the right AWS account to access the secret. If when I'm reading this I've forgotten that account, just make another secret
+
 ```
-npx sst secret set CloudflareJwtSecret $(openssl rand -hex 32)
+aws secretsmanager put-secret-value --secret-id CommittedJwtToken --secret-string $(openssl rand -hex 32)
 ```
 
+Then set it for SST with this command 
+
+```
+npx sst secret set CloudflareJwtSecret $(aws secretsmanager get-secret-value --secret-id CommittedJwtToken | jq ".SecretString" -r)
+```
 
 ## Commands for testing
 Tests signup
@@ -42,10 +49,16 @@ curl https://committed-jackson-honoscript.jacksontkennedy99.workers.dev/login -X
 Tests verification (two commands) 
 ```
 1. Login and save the token
-JWT=$(curl https://committed-jackson-honoscript.jacksontkennedy99.workers.^Cv/login -X POST -H 'content-type: application/json' -d '{"username": "username", "password": "password"}' |
-─│ jq -r ".jwt") && echo $JWT
+JWT=$(curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/login -X POST -H 'content-type: application/json' -d '{"username": "username", "password": "password"}' | jq -r ".jwt") && echo $JWT
 
 2. Make a request with the token
-curl https://committed-jackson-honoscript.jacksontkennedy99.workers.dev/verify -X POST -H 'content-type: application/json' -d '{"token": "'"'$JWT'"'"}'
-
+curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/anything -X POST -H 'content-type: application/json' -H 'Authorization: Bearer '"$JWT"
+```
+Make a post (first needs to get the JWT like above)
+```
+curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/message -X POST -H 'content-type: application/json' -H 'Authorization: Bearer '"$JWT" -d '{"message": "this is my message", "parent_id": { "commit_type": "empty"} }'
+```
+Read a post (also needs to get a JWT like above)
+```
+curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/message/2 -X GET -H 'Authorization: Bearer '"$JWT" 
 ```

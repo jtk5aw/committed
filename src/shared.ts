@@ -2,8 +2,10 @@ import { createMiddleware } from "hono/factory";
 import { database, DatabaseType } from "./db/drizzle";
 import { Resource } from "sst";
 import { ZodSchema } from "zod";
-import { ErrorResponse, VALIDATION_FAILURE_KIND } from "./api_types";
+import { ErrorResponse, ErrorResponseEnum } from "./api_types";
 import { zValidator } from "@hono/zod-validator";
+import { hc } from "hono/client";
+import { AuthClientType, Client } from "./auth";
 
 // Custom created Middlewares and Middleware wrappers
 export const databaseClient = createMiddleware<{
@@ -16,18 +18,27 @@ export const databaseClient = createMiddleware<{
   await next();
 });
 
+export const authClient = createMiddleware<{
+  Variables: { auth: Client };
+}>(async (c, next) => {
+  const client = hc<AuthClientType>("https://this.has.to.be.valid/", {
+    fetch: Resource.Auth.fetch.bind(Resource.Auth),
+  });
+  c.set("auth", client);
+  await next();
+});
+
 export function createZValidator(schema: ZodSchema) {
   return zValidator("json", schema, (result, c) => {
     // Forces TS to believe .error exists
     if (result.success === false) {
       console.log(result.error);
-      const errorResponse = {
+      const errorResponse: ErrorResponse = {
         code: 422,
-        kind: VALIDATION_FAILURE_KIND,
+        kind: ErrorResponseEnum.ValidationFailureKind,
         message: "Failed to parse input",
       };
-      const validatedErrorResponse = ErrorResponse.parse(errorResponse);
-      return c.json(validatedErrorResponse, 422);
+      return c.json(errorResponse, 422);
     }
   });
 }
