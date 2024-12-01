@@ -3,6 +3,8 @@ import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { Resource } from "sst";
 import {
+  Claim,
+  ClaimSchema,
   ErrorResponse,
   ErrorResponseEnum,
   LoginFailedEnum,
@@ -48,7 +50,7 @@ const app = new Hono()
   .use(prettyJSON())
   .use(databaseClient)
   // Routes
-  .post("/signup", createZValidator(SignUpRequestBody), async (c) => {
+  .post("/signup", createZValidator("json", SignUpRequestBody), async (c) => {
     const { username, password, is_public } = c.req.valid("json");
 
     const salt_arr = new Uint8Array(16);
@@ -85,7 +87,7 @@ const app = new Hono()
     };
     return c.json(response, 200);
   })
-  .post("/login", createZValidator(LoginRequestBody), async (c) => {
+  .post("/login", createZValidator("json", LoginRequestBody), async (c) => {
     const { username, password } = c.req.valid("json");
 
     const result = await c.var.db.query.users.findFirst({
@@ -126,7 +128,7 @@ const app = new Hono()
     };
     return c.json(response, 200);
   })
-  .post("/verify", createZValidator(VerifyRequestBody), async (c) => {
+  .post("/verify", createZValidator("json", VerifyRequestBody), async (c) => {
     const { token } = c.req.valid("json");
     const key = await getJwtSigningKey();
     const result = await verifyJwt(token, key);
@@ -217,8 +219,8 @@ async function getJwtSigningKey(): Promise<CryptoKey> {
  * Generates a JWT token for the given username and with the provided signing key.
  */
 async function generateJwt(userId: string, key: CryptoKey): Promise<string> {
-  const epochSeconds = Math.floor(new Date().getTime() / 1000);
-  const claims = {
+  const epochSeconds = getEpochSeconds();
+  const claims: Claim = {
     iss: COMMITTED_ISSUER,
     sub: userId,
     iat: epochSeconds,
@@ -304,13 +306,29 @@ async function verifyJwt(
       error: await failedVerificationResponse(),
     };
   }
-  const { sub, exp, iat } = JSON.parse(
-    new TextDecoder().decode(claimsDecodeResult.data),
+  const claimParseResult = ClaimSchema.safeParse(
+    JSON.parse(new TextDecoder().decode(claimsDecodeResult.data)),
   );
+  if (claimParseResult.success === false) {
+    console.log(claimParseResult.error);
+    return {
+      success: false,
+      error: await failedVerificationResponse(),
+    };
+  }
+  const { sub, exp, iat } = claimParseResult.data;
 
-  // TODO: NEED TO CHECK THE EXPIRATION HERE
+  const currEpochSeconds = getEpochSeconds();
+  if (exp <= currEpochSeconds) {
+    console.log(
+      "Token expired: exp = " + exp + " currEpochSeconds: " + currEpochSeconds,
+    );
+    return {
+      success: false,
+      error: await failedVerificationResponse(),
+    };
+  }
 
-  // TODO: Validate the claim matches a zod type
   const response: VerifySuccessResponse = {
     userId: sub,
     expires: exp,
@@ -359,6 +377,10 @@ function base64urlDecode(
     console.log(err);
     return { success: false, err };
   }
+}
+
+function getEpochSeconds(): number {
+  return Math.floor(new Date().getTime() / 1000);
 }
 
 const client = hc<typeof app>("");

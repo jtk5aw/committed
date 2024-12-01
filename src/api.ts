@@ -3,11 +3,18 @@ import { bearerAuth } from "hono/bearer-auth";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { authClient, createZValidator, databaseClient } from "./shared";
-import { LoginRequestBody, NewCommitRequestBody, ParentId } from "./api_types";
+import {
+  GetManyCommitsQuery,
+  GetSingleCommitParam,
+  LoginRequestBody,
+  NewCommitRequestBody,
+  ParentId,
+} from "./api_types";
 import { z } from "zod";
-import { commits } from "./db/commits.sql";
-import { zValidator } from "@hono/zod-validator";
+import { commits, COMMON_COMMIT_PARAMS } from "./db/commits.sql";
 import { eq } from "drizzle-orm";
+
+// TODO WARNING: No authz exists, need to add that before thsi is actually useful
 
 const app = new Hono<{ Variables: { userId: number } }>()
   // Middleware
@@ -16,9 +23,7 @@ const app = new Hono<{ Variables: { userId: number } }>()
   .use(databaseClient)
   .use(authClient)
   // Can't use bearerauth as this is how a token is received
-  // TODO: Determine if this should have its own body that is converted to what the
-  // auth client actually needs
-  .post("/login", createZValidator(LoginRequestBody), async (c) => {
+  .post("/login", createZValidator("json", LoginRequestBody), async (c) => {
     const body = c.req.valid("json");
     const result = await c.var.auth.login.$post({ json: { ...body } });
     if (!result.ok) {
@@ -61,40 +66,85 @@ const app = new Hono<{ Variables: { userId: number } }>()
     console.log("auth completed successfully");
     return c.json("success", 200);
   })
-  .post("/message", createZValidator(NewCommitRequestBody), async (c) => {
-    const databaseClient = c.var.db;
+  .post(
+    "/message",
+    createZValidator("json", NewCommitRequestBody),
+    async (c) => {
+      const databaseClient = c.var.db;
 
-    const { message, parent_id } = c.req.valid("json");
-    const convertedParentId = getParentCommitId(parent_id);
-    const userId = c.var.userId;
+      const { message, parent_id } = c.req.valid("json");
+      const convertedParentId = getParentCommitId(parent_id);
+      const userId = c.var.userId;
 
-    // TODO: I have no idea why this is a type error
-    const result = await databaseClient.insert(commits).values({
-      user_id: userId,
-      parent_commit_id: convertedParentId,
-      content: message,
-      deleted: false,
-    });
+      // TODO: I have no idea why this is a type error
+      const result = await databaseClient.insert(commits).values({
+        user_id: userId,
+        parent_commit_id: convertedParentId,
+        content: message,
+        deleted: false,
+      });
 
-    if (!result.success) {
-      console.log(result.error);
-      c.json("Failed to post", 500);
-    }
+      if (!result.success) {
+        console.log(result.error);
+        c.json("Failed to post", 500);
+      }
 
-    return c.json(201);
-  })
-  // TODO: Determine if this is useful in any way and if so modify it to be legit
+      return c.json(201);
+    },
+  )
+  .get(
+    "/message",
+    createZValidator("query", GetManyCommitsQuery),
+    async (c) => {
+      const databaseClient = c.var.db;
+      const { user_id } = c.req.valid("query");
+
+      const result = await databaseClient.query.commits.findMany({
+        where: eq(commits.user_id, user_id),
+        columns: {
+          content: true,
+          deleted: true,
+        },
+        with: {
+          user: {
+            columns: {
+              username: true,
+            },
+          },
+          parentCommit: {
+            with: {
+              user: {
+                columns: {
+                  username: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!result) {
+        return c.json("Failed to find commits", 400);
+      }
+
+      const values = Array.from(result.values()).map((value) => {
+        return {
+          username: value.user.username,
+          parentId: value.parentCommit?.id,
+          parentUserName: value.parentCommit?.user.username,
+          content: value.content,
+          deleted: value.deleted,
+        };
+      });
+      const toReturn = {
+        numCommits: values.length,
+        values,
+      };
+      return c.json(toReturn, 200);
+    },
+  )
   .get(
     "/message/:id",
-    zValidator(
-      "param",
-      z.object({
-        id: z
-          .string()
-          .transform((v) => parseInt(v))
-          .refine((v) => !isNaN(v), { message: "not a number" }),
-      }),
-    ),
+    createZValidator("param", GetSingleCommitParam),
     async (c) => {
       const databaseClient = c.var.db;
       const { id } = c.req.valid("param");
@@ -106,20 +156,34 @@ const app = new Hono<{ Variables: { userId: number } }>()
           deleted: true,
         },
         with: {
-          users: {
+          user: {
             columns: {
               username: true,
+            },
+          },
+          parentCommit: {
+            with: {
+              user: {
+                columns: {
+                  username: true,
+                },
+              },
             },
           },
         },
       });
 
       if (!result) {
-        c.json({ code: 400, message: "Specified commit does not exist" }, 400);
+        return c.json(
+          { code: 400, message: "Specified commit does not exist" },
+          400,
+        );
       }
 
       const toReturn = {
-        username: result.users.username,
+        username: result.user.username,
+        parentId: result.parentCommit?.id,
+        parentUserName: result.parentCommit?.user.username,
         content: result.content,
         deleted: result.deleted,
       };

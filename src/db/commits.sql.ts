@@ -18,11 +18,17 @@ export const commits = sqliteTable("commits", {
     .$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
 });
 
-export const commitsRelations = relations(commits, ({ one }) => ({
-  users: one(users, {
+export const commitsRelations = relations(commits, ({ one, many }) => ({
+  user: one(users, {
     fields: [commits.user_id],
     references: [users.id],
   }),
+  parentCommit: one(commits, {
+    fields: [commits.parent_commit_id],
+    references: [commits.id],
+    relationName: "parentCommit",
+  }),
+  childrenCommits: many(commits, { relationName: "parentCommit" }),
 }));
 
 export const users = sqliteTable(

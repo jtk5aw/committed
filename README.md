@@ -7,5 +7,6 @@ For that reason, right now all that exists is handrolled auth.
 
 ### TODO
 * Implement authorization. Want to use Cedar for this. 
+    * Might make sense to have another worker handle that too? Is an AuthN worker and an AuthZ worker dumb? 
 * Implement something actually useful for posting and reading messages
     * Initially I wanted to make this a CLI but might pivot to a UI. Regardless I want to make something you interace with via the keyboard not the mouse

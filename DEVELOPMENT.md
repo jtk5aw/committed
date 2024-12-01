@@ -54,11 +54,18 @@ JWT=$(curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/log
 2. Make a request with the token
 curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/anything -X POST -H 'content-type: application/json' -H 'Authorization: Bearer '"$JWT"
 ```
-Make a post (first needs to get the JWT like above)
+
+All remainnig posts require bearer auth to pass. Therefore, the command above with `JWT=` must be successfully run before continuing. Then you can make requests until that token expires. 
+
+Make a post
 ```
 curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/message -X POST -H 'content-type: application/json' -H 'Authorization: Bearer '"$JWT" -d '{"message": "this is my message", "parent_id": { "commit_type": "empty"} }'
 ```
-Read a post (also needs to get a JWT like above)
+Read a post 
 ```
 curl https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/message/2 -X GET -H 'Authorization: Bearer '"$JWT" 
+```
+Read all posts for a user (plus make it pretty (the json that is))
+```
+curl "https://committed-jackson-apiscript.jacksontkennedy99.workers.dev/message?user_id=21&pretty" -X GET -H 'Authorization: Bearer '"$JWT"
 ```

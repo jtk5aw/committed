@@ -6,6 +6,7 @@ import { ErrorResponse, ErrorResponseEnum } from "./api_types";
 import { zValidator } from "@hono/zod-validator";
 import { hc } from "hono/client";
 import { AuthClientType, Client } from "./auth";
+import { ValidationTargets } from "hono";
 
 // Custom created Middlewares and Middleware wrappers
 export const databaseClient = createMiddleware<{
@@ -28,8 +29,11 @@ export const authClient = createMiddleware<{
   await next();
 });
 
-export function createZValidator(schema: ZodSchema) {
-  return zValidator("json", schema, (result, c) => {
+export function createZValidator(
+  target: keyof ValidationTargets,
+  schema: ZodSchema,
+) {
+  return zValidator(target, schema, (result, c) => {
     // Forces TS to believe .error exists
     if (result.success === false) {
       console.log(result.error);

@@ -37,7 +37,47 @@ export const NewCommitRequestBody = z.object({
   parent_id: ParentId,
 });
 
+// Get Message routes
+export const GetSingleCommitParam = z.object({
+  id: z
+    .string()
+    .transform((v) => parseInt(v))
+    .refine((v) => !isNaN(v), { message: "not a number" }),
+});
+
+export const GetManyCommitsQuery = z.object({
+  user_id: z
+    .string()
+    .transform((v) => parseInt(v))
+    .refine((v) => !isNaN(v), { message: "not a number" }),
+});
+
 /// Auth
+
+export interface Claim {
+  // Issuer (default string)
+  iss: string;
+  // Subject (user_id) (TODO: Technially user_id will be a number but want to move away from user_id so leaving flexibility)
+  sub: string;
+  // Issued at (epoch second that claim was made)
+  iat: number;
+  // Expires (epoch second that the claim expires)
+  exp: number;
+}
+
+// This schema and the Claim interface may not align perfectly. For example,
+// right now the userId is a number but claim allows it to be any string.
+// Either a new schema will be added to handle any changes to this in the future
+// or this schema will just be changed
+export const ClaimSchema = z.object({
+  iss: z.string(),
+  sub: z
+    .string()
+    .transform((v) => parseInt(v))
+    .refine((v) => !isNaN(v), { message: "not a number" }),
+  iat: z.number().int().min(0),
+  exp: z.number().int().min(0),
+});
 
 // Sign-up Route
 export const SignUpRequestBody = z.object({
